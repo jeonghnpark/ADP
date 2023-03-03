@@ -71,6 +71,7 @@ mark2 = df[df['cluster'] == 2].index
 plt.scatter(x=df.loc[mark0, 'pca_x'], y=df.loc[mark0, 'pca_y'], marker='o')
 plt.scatter(x=df.loc[mark1, 'pca_x'], y=df.loc[mark1, 'pca_y'], marker='s')
 plt.scatter(x=df.loc[mark2, 'pca_x'], y=df.loc[mark2, 'pca_y'], marker='^')
+plt.title("After PCA")
 plt.show()
 
 # make_blobs()를 이용해서 데이터 생성후 군집해보기
@@ -104,5 +105,114 @@ centers = kmeans.cluster_centers_
 df.loc[df['label'] == 0]
 # visual
 markers = ['o', 's', '^', "P", "D", "H", 'x']
-# for label in pd.unique(cluster_labels):
-#     plt.scatter(x=df.loc[df['label'], ''] == label], y =)
+pd.unique(cluster_labels)
+for label in pd.unique(cluster_labels):
+    label_cluster = df[df['label'] == label]
+    centers_x_y = centers[label]
+    plt.scatter(x=label_cluster['ftr1'], y=label_cluster['ftr2'], marker=markers[label], edgecolor='k')
+
+    # 중심시각화
+    plt.scatter(x=centers_x_y[0], y=centers_x_y[1], s=200, color='white', alpha=0.9, edgecolor='k',
+                marker=markers[label])
+    plt.scatter(x=centers_x_y[0], y=centers_x_y[1], s=70, color='k', edgecolor='k', marker='' % label)
+
+plt.show()
+
+df.groupby('target')['label'].value_counts()
+
+# 군집평가
+from sklearn.metrics import silhouette_samples, silhouette_score
+from sklearn.cluster import KMeans
+
+iris = load_iris()
+
+iris.feature_names
+df = pd.DataFrame(iris.data, columns=iris.feature_names)
+
+kmeans = KMeans(n_clusters=3, random_state=0).fit(df)
+df['label'] = kmeans.labels_
+df.head()
+
+# 모든 개별데이터에 실루엣 계수를 구함
+score_sample = silhouette_samples(iris.data, df['label'])
+score_sample.shape
+df['s_coef'] = score_sample
+avg_score = silhouette_score(iris.data, df['label'])
+print(f"붓꽃 데이터 실루엣 스코어(0~1) (k=3 일때) {avg_score:.3f}")
+print("붓꽃 kmean 군집별 실루엣 스코어, ")
+print(f"{df.groupby('label')['s_coef'].mean()}")
+
+# 최적 k를 찾는법 
+best_K = 0
+best_score = -1
+
+for i in range(2, 6):
+    kmeans = KMeans(n_clusters=i, random_state=123)
+    kmeans.fit(df)
+    avg_score = silhouette_score(df, df['label'])
+    score_samples = silhouette_samples(df, df['label'])
+    if avg_score > best_score:
+        best_score = avg_score
+        df['label'] = kmeans.labels_
+        df['s_score'] = score_samples
+        best_K = i
+
+print(f"best k is {best_K}")
+print(f"best score is {best_score:.3f}")
+print(f"군집별 평균\n {df.groupby('label')['s_score'].mean()}")
+
+from sklearn.datasets import make_blobs
+from sklearn.cluster import MeanShift, estimate_bandwidth
+
+X, y = make_blobs(n_samples=200, n_features=2, centers=3, cluster_std=0.7, random_state=0)
+
+df = pd.DataFrame(X, columns=['ftr1', 'ftr2'])
+
+df['target'] = y
+
+best_bandwidth = estimate_bandwidth(X)
+
+meanshift = MeanShift(bandwidth=best_bandwidth)
+labels = meanshift.fit_predict(X)
+center_position = meanshift.cluster_centers_
+
+print(f"cluster label 유형 : {np.unique(labels)} \n best bandwidth ={best_bandwidth:.3f}")
+
+# target과 estimat를 비교한다.
+markers = ['o', 's', '^', 'P', "D", 'H', 'x']
+df['label'] = labels
+
+print(f"average silhouette_score is {silhouette_score(X, df['label'])}")
+
+for label in np.unique(df['label']):
+    label_cluster = df[df['label'] == label]
+    center = center_position[label]
+    plt.scatter(x=label_cluster['ftr1'], y=label_cluster['ftr2'], marker=markers[label])
+    plt.scatter(x=center[0], y=center[1], s=100, marker='*')
+
+from sklearn.mixture import GaussianMixture
+
+iris = load_iris()
+X = iris.data
+
+lowest_bic = np.infty
+bic = []
+
+n_component_range = range(1, 7)
+
+for n_component in n_component_range:
+    gmm = GaussianMixture(n_components=n_component)
+    gmm.fit(X)
+    bic.append(gmm.bic(X))
+    if bic[-1] < lowest_bic:
+        lowest_bic = bic[-1]
+        best_gmm = gmm
+
+gmm = best_gmm
+labels = gmm.predict(X)
+
+print(f"average silhouette_score is {silhouette_score(X, labels)}")
+
+plt.scatter(x=X[:, 0], y=X[:, 1], c=labels, s=40, cmap='viridis')
+plt.title("cluster analysis for iris data using GMM")
+plt.show()
